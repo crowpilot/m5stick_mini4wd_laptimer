@@ -1,13 +1,17 @@
 #include <M5StickC.h>
 #include<Ticker.h>
+//#include<Ultrasonic.h>
 #include "WiFi.h"
 
 #define MAXLAP 6
 
-Ticker ticker;
+#define USONIC_PIN 33
 
-const char SSID[] = "aterm-fd1432-g";
-const char WIFIKEY[] = "6ae30ded8fa41";
+Ticker ticker;
+//Ultrasonic ultrasonic(USONIC_PIN);
+
+//const char SSID[] = "";
+//const char WIFIKEY[] = "";
 
 
 int coursenum = 0;
@@ -18,6 +22,10 @@ volatile unsigned long splittime;
 volatile unsigned long average;
 volatile unsigned long besttime;
 volatile int lapcount;
+
+volatile int sensordefault;
+volatile int currentrange;
+volatile int trigger=0;
 
 enum Sequence {
   SEQ_OPENING,
@@ -39,7 +47,31 @@ void setzero() {
   besttime = 0;
   lapcount = 0;
   gSequence = SEQ_OPENING;
+  
+  trigger=0;
+  int sum=0;
+  for(int i=0;i<10;i++){
+    sum+=currentrange;
+    delay(100);
+  }
+  sensordefault=sum/10;
 
+}
+
+void rangetask(void* arg){
+  while(1){
+  pinMode(USONIC_PIN, OUTPUT);
+  digitalWrite(USONIC_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(USONIC_PIN, HIGH);
+  delayMicroseconds(5);//5
+  digitalWrite(USONIC_PIN,LOW);
+  pinMode(USONIC_PIN,INPUT);
+  long duration;
+  duration = pulseIn(USONIC_PIN,HIGH);
+  currentrange = duration/29.4/2;
+  delay(3);
+  }
 }
 
 void opening() {
@@ -86,6 +118,8 @@ void selectcourse() {
       M5.Lcd.print("NG\n");
     }
     M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);*/
+  M5.Lcd.setCursor(0,120);
+  M5.Lcd.print(sensordefault);
 
   int totalcourse = sizeof(coursename) / sizeof(*coursename);
   while (!M5.BtnA.wasPressed()) {
@@ -129,19 +163,24 @@ void lap() {
       break;
     }
     //laptime
-    if (M5.BtnB.wasPressed()) {
+    if (sensordefault-currentrange>1&&trigger==0) {
       // laptime[lapcount] = splittime-laptime[lapcount-1];
       lapcount++;
+      trigger=1;
       if (lapcount >= MAXLAP) {
         gSequence = SEQ_GOAL;
         ticker.detach();
         break;
       }
       laptime[lapcount] = 0;
+    }else if(sensordefault-currentrange<=1){
+      delay(30);
+      trigger=0;
     }
     //  M5.Lcd.setCursor(0,20);
     //M5.Lcd.printf("%02lu:%02lu.%02lu",(splittime/6000)%60,(splittime/100)%60,splittime%100);
     M5.update();
+    delay(1);
   }
   //calc average
 }
@@ -406,6 +445,7 @@ void share() {
 void setup() {
   // put your setup code here, to run once:
   M5.begin();
+  xTaskCreatePinnedToCore(rangetask,"rangetask",4096,NULL,1,NULL,1);
   //  WiFi.begin(SSID, WIFIKEY);
 }
 
