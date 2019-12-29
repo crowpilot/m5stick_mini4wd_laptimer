@@ -1,7 +1,10 @@
+//ultrasonic sensor laptimer
+//M5Stick-C + grove Ultrasonic ranger
+//not include ultrasonic library
+//QR code SNS share
 #include <M5StickC.h>
 #include<Ticker.h>
-//#include<Ultrasonic.h>
-#include "WiFi.h"
+//#include "WiFi.h"
 
 #define MAXLAP 6
 
@@ -174,7 +177,7 @@ void lap() {
       }
       laptime[lapcount] = 0;
     }else if(sensordefault-currentrange<=1){
-      delay(30);
+      delay(100);
       trigger=0;
     }
     //  M5.Lcd.setCursor(0,20);
