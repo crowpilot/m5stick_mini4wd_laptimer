@@ -26,9 +26,9 @@ volatile unsigned long average;
 volatile unsigned long besttime;
 volatile int lapcount;
 
-volatile int sensordefault;
+volatile float sensordefault;
 volatile int currentrange;
-volatile int trigger=0;
+volatile int trigger = 0;
 
 enum Sequence {
   SEQ_OPENING,
@@ -41,6 +41,15 @@ enum Sequence {
 };
 Sequence gSequence = SEQ_OPENING;
 
+void sensorreset(){
+  int sum = 0;
+  for (int i = 0; i < 10; i++) {
+    sum += currentrange;
+    delay(100);
+  }
+  sensordefault = sum / 10;
+}
+
 void setzero() {
   for (int i = 0; i < MAXLAP + 1; i++) {
     laptime[i] = 0;
@@ -48,32 +57,27 @@ void setzero() {
   splittime = 0;
   average = 0;
   besttime = 0;
-  lapcount = 0;
+  lapcount = -1;
   gSequence = SEQ_OPENING;
-  
-  trigger=0;
-  int sum=0;
-  for(int i=0;i<10;i++){
-    sum+=currentrange;
-    delay(100);
-  }
-  sensordefault=sum/10;
+
+  trigger = 0;
+  sensorreset();
 
 }
 
-void rangetask(void* arg){
-  while(1){
-  pinMode(USONIC_PIN, OUTPUT);
-  digitalWrite(USONIC_PIN, LOW);
-  delayMicroseconds(2);
-  digitalWrite(USONIC_PIN, HIGH);
-  delayMicroseconds(5);//5
-  digitalWrite(USONIC_PIN,LOW);
-  pinMode(USONIC_PIN,INPUT);
-  long duration;
-  duration = pulseIn(USONIC_PIN,HIGH);
-  currentrange = duration/29.4/2;
-  delay(3);
+void rangetask(void* arg) {
+  while (1) {
+    pinMode(USONIC_PIN, OUTPUT);
+    digitalWrite(USONIC_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(USONIC_PIN, HIGH);
+    delayMicroseconds(5);//5
+    digitalWrite(USONIC_PIN, LOW);
+    pinMode(USONIC_PIN, INPUT);
+    long duration;
+    duration = pulseIn(USONIC_PIN, HIGH);
+    currentrange = duration / 29.4 / 2;
+    delay(3);
   }
 }
 
@@ -121,7 +125,7 @@ void selectcourse() {
       M5.Lcd.print("NG\n");
     }
     M5.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);*/
-  M5.Lcd.setCursor(0,120);
+  M5.Lcd.setCursor(0, 120);
   M5.Lcd.print(sensordefault);
 
   int totalcourse = sizeof(coursename) / sizeof(*coursename);
@@ -158,27 +162,37 @@ void count() {
 void lap() {
   M5.Lcd.setCursor(0, 0);
   M5.Lcd.printf("LAP");
-  ticker.attach_ms(10, count);
+
   while (1) {
+//    M5.Lcd.setCursor(0,0);
+//    M5.Lcd.printf("%3d",currentrange);
     if (M5.BtnA.wasPressed()) {
       gSequence = SEQ_MENU;
       ticker.detach();
       break;
     }
     //laptime
-    if (sensordefault-currentrange>1&&trigger==0) {
+    if (sensordefault - currentrange >= 1 && trigger == 0) {
       // laptime[lapcount] = splittime-laptime[lapcount-1];
       lapcount++;
-      trigger=1;
+      trigger = 1;
+      if (lapcount == 0) {
+        ticker.attach_ms(10, count);
+      }
+
       if (lapcount >= MAXLAP) {
         gSequence = SEQ_GOAL;
         ticker.detach();
         break;
       }
+      //nextlap
       laptime[lapcount] = 0;
-    }else if(sensordefault-currentrange<=1){
-      delay(100);
-      trigger=0;
+      delay(200);
+    } else if (sensordefault - currentrange < 1&&trigger==1) {
+      //trriger_reset
+      trigger = 0;
+    }else if(trigger==1){
+      sensorreset();
     }
     //  M5.Lcd.setCursor(0,20);
     //M5.Lcd.printf("%02lu:%02lu.%02lu",(splittime/6000)%60,(splittime/100)%60,splittime%100);
@@ -437,7 +451,7 @@ void share() {
       }
     }
     for (int i = 0; i < totalmenu; i++) {
-      M5.Lcd.setCursor(0, 20+16*i);
+      M5.Lcd.setCursor(0, 20 + 16 * i);
       M5.Lcd.printf("%c%-9s", i == menunum ? '*' : ' ', menu[i]);
     }
     M5.update();
@@ -448,7 +462,7 @@ void share() {
 void setup() {
   // put your setup code here, to run once:
   M5.begin();
-  xTaskCreatePinnedToCore(rangetask,"rangetask",4096,NULL,1,NULL,1);
+  xTaskCreatePinnedToCore(rangetask, "rangetask", 4096, NULL, 1, NULL, 1);
   //  WiFi.begin(SSID, WIFIKEY);
 }
 
